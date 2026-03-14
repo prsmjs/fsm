@@ -1,0 +1,66 @@
+-- core concept --
+
+this is a non-deterministic FSM - multiple states can be active at once.
+states are a set, not a single value. step() evaluates transitions against
+all active states and fires at most one transition per call.
+
+-- ticks --
+
+tick(state, fn, { interval }) registers a time-based function for a state.
+ticks only run when their state is active. on each step(), if enough time
+has elapsed, the tick function runs multiple times (catch-up logic). this
+makes FSMs resumable after being saved and restored.
+
+-- transitions --
+
+transitions can have:
+- from/to as strings or arrays (for multi-state transitions)
+- when(ctx) guard function
+- then(ctx) post-transition callback
+- action({ data, from, to }) alternative callback
+- priority number (highest wins when multiple match)
+
+transitions without `from` are "entry" transitions - they fire when the
+target state isn't already active and the guard passes.
+
+-- persistence --
+
+save(name) serializes data, activeStates, and tick timestamps to storage.
+loadMachine(name, config) restores from storage, merging saved state with
+fresh config (transitions, hooks). tick functions must be re-registered
+after loading since functions can't be serialized.
+
+default storage driver uses localStorage (browser) or global object (node).
+for production, use the sqlite driver or write your own:
+
+```js
+import { setStorageDriver } from '@prsm/fsm'
+import { sqliteDriver } from '@prsm/fsm/sqlite'
+
+setStorageDriver(sqliteDriver({ filename: './state.db' }))
+```
+
+-- integration with mesh-kit --
+
+mesh records are the natural transport for FSM state. write the FSM state
+to a record on each step, clients subscribe and get live updates:
+
+```js
+fsm.on('step', ({ state, data }) => {
+  mesh.writeRecord(`game:${gameId}`, { state, data })
+})
+```
+
+server-side command pattern:
+
+```js
+mesh.exposeCommand('fsm:step', async (ctx) => {
+  const { machineId, input } = ctx.payload
+  const fsm = await loadMachine(machineId, config)
+  fsm.data.input = input
+  fsm.step()
+  await fsm.save(machineId)
+  await mesh.writeRecord(`fsm:${machineId}`, { state: fsm.state, data: fsm.data })
+  return { state: fsm.state }
+})
+```

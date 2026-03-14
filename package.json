@@ -1,0 +1,41 @@
+{
+  "name": "@prsm/fsm",
+  "version": "2.0.0",
+  "description": "Non-deterministic finite state machine with time-based ticks, persistence, and multiple active states",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./sqlite": {
+      "types": "./types/sqliteDriver.d.ts",
+      "default": "./src/sqliteDriver.js"
+    }
+  },
+  "types": "./types/index.d.ts",
+  "files": [
+    "src",
+    "types"
+  ],
+  "scripts": {
+    "test": "vitest --reporter=verbose --run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npx tsc --declaration --allowJs --emitDeclarationOnly --skipLibCheck --target es2020 --module nodenext --moduleResolution nodenext --strict false --esModuleInterop true --outDir ./types src/index.js src/sqliteDriver.js"
+  },
+  "author": "nvms",
+  "license": "ISC",
+  "peerDependencies": {
+    "sqlite3": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "sqlite3": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "sqlite3": "^5.1.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
