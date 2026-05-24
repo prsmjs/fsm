@@ -201,28 +201,28 @@ States defined as objects are considered initially active (truthy). Use `activeS
 Listen for state changes and ticks:
 
 ```js
-machine.on(“transition”, ({ from, to }) => {
+machine.on("""transition""", ({ from, to }) => {
   // fires before activeStates are mutated
   // from and to are arrays
 });
 
-machine.on(“state:exit”, ({ state, to }) => {
+machine.on("""state:exit""", ({ state, to }) => {
   // fires after the state is removed from activeStates
   // machine.has(state) returns false here
   // to is an array of destination states
 });
 
-machine.on(“state:enter”, ({ state, from }) => {
+machine.on("""state:enter""", ({ state, from }) => {
   // fires after the state is added to activeStates
   // machine.has(state) returns true here
   // from is an array of origin states
 });
 
-machine.on(“tick”, ({ state, interval }) => {
+machine.on("""tick""", ({ state, interval }) => {
   // fires after tick function runs, before transitions
 });
 
-machine.on(“step”, ({ state, data }) => {
+machine.on("""step""", ({ state, data }) => {
   // fires once per step(), after ticks and transitions
 });
 ```
