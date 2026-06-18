@@ -1,6 +1,6 @@
 {
   "name": "@prsm/fsm",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Non-deterministic finite state machine with time-based ticks, persistence, and multiple active states",
   "type": "module",
   "exports": {
