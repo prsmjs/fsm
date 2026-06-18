@@ -1,5 +1,12 @@
 import sqlite3 from "sqlite3";
 
+/**
+ * Creates a storage driver backed by SQLite for use with setStorageDriver().
+ *
+ * @param {Object} options - Driver options.
+ * @param {string} options.filename - Path to the SQLite database file; pass ":memory:" for an ephemeral in-memory store. The fsm_storage table is created automatically if it does not exist.
+ * @returns {{ set: function(string, string): Promise<void>, get: function(string): Promise<string|null> }} A driver with async set(key, value) and get(key) methods.
+ */
 export function sqliteDriver({ filename }) {
   const db = new sqlite3.Database(filename);
   const init = new Promise((resolve, reject) => {

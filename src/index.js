@@ -1,31 +1,31 @@
 /**
  * @typedef {Object} FSMConfig
- * @property {Object} [data]
- * @property {Object.<string, Object>} states
- * @property {Array<FSMTransition>} transitions
- * @property {Object} [hooks]
+ * @property {Object} [data] - Shared mutable data object carried with the machine and exposed to transitions, ticks, and hooks via ctx.get/ctx.set (default {}). It is serialized as-is on save, so keep it JSON-friendly.
+ * @property {Object.<string, Object>} states - Map of state name to its initial definition. A truthy value (e.g. 1) marks the state as initially active; a falsy value (e.g. 0) marks it inactive. The value may also be an object holding per-state hooks such as enter/exit. Use activeStates to override which states start active.
+ * @property {Array<FSMTransition>} transitions - Ordered list of transition rules evaluated on each step(). At most one transition fires per step(); when several match, priority decides, otherwise the first in array order wins.
+ * @property {Object} [hooks] - Lifecycle callbacks invoked during transitions. Supports enter/exit (and their onEnter/onExit aliases) keyed by state name, plus onTransition({ from, to, data }) which fires for every transition.
  */
 
 /**
  * @typedef {Object} FSMTransition
- * @property {string|string[]} from
- * @property {string|string[]} to
- * @property {function(Object): boolean} [when]
- * @property {function(Object): void} [then]
- * @property {function(Object): void} [action]
- * @property {number} [priority]
+ * @property {string|string[]} from - Source state(s) required for this transition. When an array, every listed state must currently be active for the rule to match. Omit from to express an entry transition that fires whenever the target state is not already active.
+ * @property {string|string[]} to - Destination state(s) to activate. When an array, all listed states are entered at once and all matched from states are exited.
+ * @property {function(Object): boolean} [when] - Guard predicate receiving the ctx object ({ data, state, has, get, set }); the transition only matches when it returns true. With no when, the transition matches purely on from/to state membership.
+ * @property {function(Object): void} [then] - Side-effect callback run when the transition fires, receiving the same ctx object as when. Runs before action and before activeStates are mutated.
+ * @property {function(Object): void} [action] - Side-effect callback run when the transition fires, receiving { data, from, to } where from and to are arrays of state names. Runs after then.
+ * @property {number} [priority] - Tie-breaker when multiple transitions match in the same step(); the highest priority wins (no default). If no matching transition has a priority, the first match in array order is chosen instead.
  */
 
 /**
  * @typedef {Object} FSMInstance
- * @property {function(): void} step
- * @property {function(string, function): void} on
- * @property {function(string, function): void} off
- * @property {function(string): boolean} has
- * @property {function(string, function, Object): void} tick
- * @property {function(string): void} save
- * @property {Object} data
- * @property {Array<string>} state
+ * @property {function(): Array<Object>} step - Advances the machine once: processes due ticks, then fires at most one matching transition, returning an array of the transitions that fired (empty when none did).
+ * @property {function(string, function): void} on - Subscribes a handler to a machine event ("transition", "state:enter", "state:exit", "tick", or "step").
+ * @property {function(string, function): void} off - Unsubscribes a previously registered handler from a machine event; the function reference must be the same one passed to on.
+ * @property {function(string): boolean} has - Returns whether the given state is currently active.
+ * @property {function(string, function, Object): void} tick - Registers a per-state tick function that runs while the state is active. Re-registering replaces the prior tick for that state and, after loadMachine, restores the saved interval and timing so catch-up continues correctly.
+ * @property {function(string): Promise<void>} save - Persists the machine (data, active states, and tick timing) under the given name via the current storage driver. Tick functions themselves are not serialized and must be re-registered with tick() after loadMachine.
+ * @property {Object} data - The machine's shared mutable data object, the same reference passed in config and mutated through ctx.set.
+ * @property {Array<string>} state - Snapshot array of the currently active state names (read-only; mutate state through transitions, not this array).
  */
 
 let storageDriver = {
@@ -47,10 +47,21 @@ let storageDriver = {
   },
 };
 
+/**
+ * Replaces the module-level storage driver used by save() and loadMachine().
+ *
+ * @param {{ set: function(string, string): (void|Promise<void>), get: function(string): (string|null|Promise<string|null>) }} driver - Storage backend with set(key, value) and get(key) methods; either may be async. The default keeps state in localStorage in the browser and on a global object in Node.
+ */
 export function setStorageDriver(driver) {
   storageDriver = driver;
 }
 
+/**
+ * Creates a new state machine from a configuration object.
+ *
+ * @param {FSMConfig} config - Machine definition: states, transitions, and optional data and hooks.
+ * @returns {FSMInstance} The machine instance.
+ */
 function createMachine(config) {
   if (!config || typeof config !== "object") throw new Error("FSM config required");
   const { data = {}, states, transitions, hooks = {}, activeStates: initialActiveStates } = config;
@@ -216,6 +227,14 @@ function createMachine(config) {
     }
   }
 
+  /**
+   * Registers a tick function that runs while the given state is active.
+   *
+   * @param {string} state - State name the tick is bound to; it only runs while this state is active.
+   * @param {function(Object): void} tickFn - Function invoked on each due interval, receiving the ctx object ({ data, state, has, get, set }).
+   * @param {Object} [options] - Tick options.
+   * @param {number} [options.interval] - Milliseconds between ticks (default 1000). Catch-up applies: if more than one interval has elapsed since the last tick, tickFn runs once per missed interval on the next step().
+   */
   function tick(state, tickFn, options = {}) {
     const { interval = 1000 } = options;
 
@@ -270,6 +289,13 @@ function createMachine(config) {
   };
 }
 
+/**
+ * Restores a machine previously persisted with save(), merging the saved data and active states over the supplied config.
+ *
+ * @param {string} name - Storage key the machine was saved under.
+ * @param {FSMConfig} [config] - Configuration to rebuild the machine with, typically the same transitions and hooks used at creation. Saved data and active states take precedence, and states is reconstructed from the saved active states if omitted. Tick functions are not restored automatically and must be re-registered with tick() after loading.
+ * @returns {Promise<FSMInstance>} The restored machine instance.
+ */
 async function loadMachine(name, config) {
   const serialized = await storageDriver.get(name);
   if (!serialized) throw new Error(`No saved FSM state for: ${name}`);
